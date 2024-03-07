@@ -29,6 +29,7 @@ class OTP(Base):
     id = Column(String, primary_key=True, index=True)
     email = Column(String, index=True)
     code = Column(String)
+    name = Column(String)
 
 class Promotion(Base):
     __tablename__ = "promotion"
@@ -42,14 +43,12 @@ class Promotion(Base):
     condition = Column(String, nullable=False)
     point = Column(Integer, nullable=False)
 
-class Client(Base):
-    __tablename__ = "client"
+class Users(Base):
+    __tablename__ = "users"
 
     id = Column(String, primary_key=True)
-    id_promotion = Column(String, ForeignKey('promotion.id'), nullable=False)
-    username = Column(String, nullable=False)
     password = Column(String, nullable=False)
-    phonenumber = Column(String, nullable=False)
+    phoneNumber = Column(String, nullable=False)
     email = Column(String)
     name = Column(String, nullable=False)
     image = Column(String, nullable=False)
@@ -57,14 +56,14 @@ class Client(Base):
     g_points = Column(Integer, nullable=False)
     sex = Column(Integer, nullable=False)
     datebirth = Column(String, nullable=False)
+    ban = Column(Integer, nullable=False)
 
-    promotion = relationship("Promotion")
 
 class CustomerPromotions(Base):
     __tablename__ = "customer_promotions"
 
     id = Column(String, primary_key=True)
-    id_client = Column(String, ForeignKey('client.id'), nullable=False)
+    id_users = Column(String, ForeignKey('users.id'), nullable=False)
     id_promotion = Column(String, ForeignKey('promotion.id'), nullable=False)
 
 class Partner(Base):
@@ -98,7 +97,7 @@ class Invoice(Base):
     __tablename__ = "invoice"
 
     id = Column(String, primary_key=True)
-    id_client = Column(String, ForeignKey('client.id'), nullable=False)
+    id_users = Column(String, ForeignKey('users.id'), nullable=False)
     id_partner = Column(String, ForeignKey('partner.id'), nullable=False)
     id_service = Column(String, nullable=False)  # Check if this should be a foreign key
     id_payments = Column(String, ForeignKey('payments.id'), nullable=False)
@@ -146,7 +145,7 @@ class TotalSanitation(Base):
     __tablename__ = "total_sanitation"
 
     id = Column(String, primary_key=True)
-    id_client = Column(String, ForeignKey('client.id'), nullable=False)
+    id_users = Column(String, ForeignKey('users.id'), nullable=False)
     note = Column(String, nullable=False)
     address = Column(String, nullable=False)
 

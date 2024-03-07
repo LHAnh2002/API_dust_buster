@@ -18,6 +18,9 @@ class AdminEmail(BaseModel):
 
 class OTPCreate(BaseModel):
     email: str
+class OTPUserCreate(BaseModel):
+    email: str
+    name: str
 
 class OTPVerify(BaseModel):
     email: str
@@ -61,3 +64,19 @@ class ServiceDurationUpdate(BaseModel):
     acreage: str
     room: str
     money: int
+
+class UsersCreate(BaseModel):
+    password: str
+    phoneNumber: str
+    email: str
+    name: str
+    sex: int
+    datebirth: str
+
+class RequestEmail(BaseModel):
+    email: str
+
+
+class ForgotPassword(BaseModel):
+    email: str
+    newPassword: str

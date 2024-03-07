@@ -1,10 +1,11 @@
 import asyncio
 import time
 from jose import JWTError, jwt
+from unidecode import unidecode
 from config.config import SECRET_KEY, ALGORITHM
 from fastapi.security import OAuth2PasswordBearer
 from fastapi import HTTPException, Depends, status
-from base.class_base import Admin, OTP, Service, ServiceDuration
+from base.class_base import Admin, OTP, Service, ServiceDuration, Users
 from jose import JWTError, jwt
 import random
 from sqlalchemy.orm import Session
@@ -20,6 +21,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 def random_id(K: int = 5):
     randoms = ''.join(random.choices('0123456789', k=K))
     return randoms
+
+def convert_string(input_string):
+    processed_string = unidecode(input_string).replace(" ", "").lower()
+    return processed_string
+
+def convert_date(input_date):
+    processed_date = input_date.replace("/", "")
+    return processed_date
 
 # Hàm tạo JWT token
 def create_jwt_token(data: dict):
@@ -50,6 +59,11 @@ async def get_admin(db, username: str):
     user = await db.fetch_one(query)
     return user
 
+async def get_users(db, email: str):
+    query = Users.__table__.select().where(Users.email == email)
+    user = await db.fetch_one(query)
+    return user
+
 async def delete_otp_after_delay(email: str, db: Session):
     await asyncio.sleep(60)
     delete_query = OTP.__table__.delete().where(OTP.email == email)
@@ -64,3 +78,5 @@ async def get_select_service_duration(db):
     query = ServiceDuration.__table__.select()
     service_duration = await db.fetch_all(query)
     return service_duration
+
+

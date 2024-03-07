@@ -3,9 +3,9 @@ from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, status
 from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import sessionmaker, Session
 from databases import Database
-from base.class_base import OTP, Base, Admin, Service, ServiceDuration
-from base.base_model import ServiceDurationUpdate, ServiceUpdateStatus, ServiceDurationCreate, ServiceAllUpdate, ServiceUpdate, Message, ChangePassword, AdminAvatar, OTPCreate, OTPVerify, ResetPassword, AdminEmail, ServiceCreate
-from utils import get_select_service_duration, get_select_service, delete_otp_after_delay, random_id, create_jwt_token, verify_jwt_token, get_admin, oauth2_scheme, token_blacklist
+from base.class_base import OTP, Base, Admin, Service, ServiceDuration, Users
+from base.base_model import ForgotPassword, RequestEmail, OTPUserCreate, UsersCreate, ServiceDurationUpdate, ServiceUpdateStatus, ServiceDurationCreate, ServiceAllUpdate, ServiceUpdate, Message, ChangePassword, AdminAvatar, OTPCreate, OTPVerify, ResetPassword, AdminEmail, ServiceCreate
+from utils import convert_string, get_users, convert_date, get_select_service_duration, get_select_service, delete_otp_after_delay, random_id, create_jwt_token, verify_jwt_token, get_admin, oauth2_scheme, token_blacklist
 from mail.otb_email import send_otp_email
 from mail.cskh_email import send_cskh_email
 
@@ -129,7 +129,6 @@ async def request_otp(otp_data: OTPCreate, background_tasks: BackgroundTasks, db
     otb_old = await db.fetch_one(query)
     
     if otb_old:
-        # Delete existing OTP data for the email
         delete_query = OTP.__table__.delete().where(OTP.email == otp_data.email)
         await db.execute(delete_query)
     
@@ -156,8 +155,7 @@ async def request_otp(otp_data: OTPCreate, background_tasks: BackgroundTasks, db
         return Message(detail=0)
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=-1)
 
-# yêu cầu OTP
-@app.post("/admin/request-otp-new-email/",response_model=Message)
+@app.post("/request-otp-new-email/",response_model=Message)
 async def request_otp_new_email(otp_data: OTPCreate, background_tasks: BackgroundTasks,current_user: dict = Depends(verify_jwt_token), db: Session = Depends(get_database)):
     
     user = await get_admin(db, current_user["sub"])
@@ -193,9 +191,12 @@ async def verify_otp(otp_data: OTPVerify, db: Session = Depends(get_database)):
 
     query = select(OTP).where(OTP.email == otp_data.email)
     otp_old = await db.fetch_one(query)
-    if otp_old['code'] == otp_data.otp:
+    # import pdb
+    # pdb.set_trace()
+    if otp_old and otp_old['code'] == otp_data.otp:
         # OTP hợp lệ
         return Message(detail=0)
+    
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=-1)
 
 # Đường dẫn để xác minh OTP
@@ -288,12 +289,12 @@ async def update_all_service(service_update: ServiceAllUpdate, db: Session = Dep
 @app.post("/admin/create-service-duration/", response_model=Message)
 async def create_service_duration(add_service_duration: ServiceDurationCreate, db: Session = Depends(get_database)):
     
-    id = "TL-" + str(random_id)
-
+    id = "TL-" + str(random_id())
     db_service_duration = ServiceDuration(id=id, **add_service_duration.dict())
     
     async with db.transaction():
         await db.execute(ServiceDuration.__table__.insert().values(
+            id=db_service_duration.id,
             time= db_service_duration.time,
             acreage= db_service_duration.acreage,
             room= db_service_duration.room,
@@ -338,29 +339,133 @@ async def update_service_duration(service_duration_update: ServiceDurationUpdate
 
     return Message(detail=0)
 
-# # Tạo tài khoản
-# @app.post("/create_users/", response_model=Message)
-# async def create_user(add_users: UserCreate, current_user: dict = Depends(verify_jwt_token), db: Session = Depends(get_database)):
-#     user = await get_user_name(db, current_user["sub"])
-#     id = user['id'] + '-' + random_id
-#     db_user = User(id=id, id_set=user['id'], **add_users.dict())
-    
-#     async with db.transaction():
-#         await db.execute(User.__table__.insert().values(
-#             id=db_user.id,
-#             id_set=db_user.id_set,
-#             image=db_user.image,
-#             username=db_user.username,
-#             password=db_user.password,
-#             name=db_user.name,
-#             email=db_user.email,
-#             address=db_user.address,
-#             phoneNumber=db_user.phoneNumber,
-#             role=db_user.role,
-#             status=db_user.status
-#         ))
 
-#     return Message(message=0)
+
+# Đăng nhập người dùng
+@app.post("/login-user/")
+async def login_user(form_data: dict, db: Session = Depends(get_database)):
+
+    email = form_data["email"]
+    password = form_data["password"]
+
+    # Lấy thông tin người dùng từ cơ sở dữ liệu
+    user = await get_users(db, email)
+
+
+    # Kiểm tra thông tin đăng nhập
+    if user is None or user["email"] != email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=-1,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    #kiểm tra mật khẩu
+    if user is None or user["password"] != password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=-2,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if user is None or user["ban"] != 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=-3,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+    # Tạo JWT token
+    token_data = {"sub": user["email"], "id": user["id"]}
+    token = create_jwt_token(token_data)
+
+    # Trả về token
+    return {"access_token": token, "token_type": "bearer"}
+# yêu cầu OTP
+@app.post("/request-otp-user/",response_model=Message)
+async def request_otp_user(otp_data: OTPUserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_database)):
+    
+    name = ""
+    if otp_data.name == "":
+        query = select(Users).where(Users.email == otp_data.email)
+        otb_old = await db.fetch_one(query)
+        name = otb_old['name']
+    query = select(OTP).where(OTP.email == otp_data.email)
+    otb_old = await db.fetch_one(query)
+    # Kiểm tra nếu otb_old không rỗng
+    if otb_old:
+        delete_query = OTP.__table__.delete().where(OTP.email == otp_data.email)
+        await db.execute(delete_query)
+
+    # Tạo và lưu OTP
+    id = "OTB-"+ random_id()
+    otp_code = str(random_id(6))
+
+    new_otp_data = OTP(id=id, code=otp_code, **otp_data.dict())
+    
+    async with db.transaction():
+        await db.execute(OTP.__table__.insert().values(
+            id=new_otp_data.id,
+            email=new_otp_data.email,
+            code= otp_code,
+            name=name
+        ))
+    send_otp_email(new_otp_data.email, otp_code, name)
+
+    background_tasks.add_task(delete_otp_after_delay, new_otp_data.email, db)
+
+    return Message(detail=0)
+
+      
+# Tạo tài khoản
+@app.post("/create-users/", response_model=Message)
+async def create_user(add_users: UsersCreate, db: Session = Depends(get_database)):
+    
+    db_user = Users(**add_users.dict())
+
+    converted_name = convert_string(db_user.name)
+    converted_date  = convert_date(db_user.datebirth)
+    
+    id = converted_name+converted_date
+    async with db.transaction():
+        await db.execute(Users.__table__.insert().values(
+            id=id,
+            password=db_user.password,
+            phoneNumber=db_user.phoneNumber,
+            email=db_user.email,
+            name=db_user.name,
+            image="",
+            money=0,
+            g_points=0,
+            sex=db_user.sex,
+            datebirth=db_user.datebirth,
+            ban=0
+        ))
+
+    return Message(detail=0)
+
+#kiểm tra email có tồn tại không
+@app.post("/request-email/",response_model=Message)
+async def request_email(otp_data: RequestEmail, db: Session = Depends(get_database)):
+
+    query = select(Users).where(Users.email == otp_data.email)
+    otb_old = await db.fetch_one(query)
+
+    # Kiểm tra nếu otb_old không rỗng
+    if otb_old:
+        return Message(detail=0)
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=-1)
+
+# Quên mật khẩu người dùng
+@app.put("/forgot-password/", response_model=Message)
+async def forgot_password(update_forgot_password: ForgotPassword, db: Session = Depends(get_database)):
+    
+    update_query = update(Users).where(Users.email == update_forgot_password.email).values(
+            password=update_forgot_password.newPassword)
+    await db.execute(update_query)
+
+    return Message(detail=0)
 
 # # Hiển thị danh sách nhân viên còn làm việc
 # @app.get("/dynamic_employee_display")
@@ -368,12 +473,6 @@ async def update_service_duration(service_duration_update: ServiceDurationUpdate
 #     # Lấy thông tin người dùng hiện tại
 #     user = await get_user_name(db, current_user["sub"])
 
-#     # Kiểm tra quyền truy cập (chỉ admin mới có thể xem danh sách user)
-#     if user["role"] != 0:
-#         raise HTTPException(
-#             status_code=status.HTTP_403_FORBIDDEN,
-#             detail=-1,
-#         )
 
 #     # Lấy danh sách user có cùng id_set, loại bỏ user có id = id_set và status = 1
 #     users_with_same_id_set = await get_dynamic_employee_display(db, user['id'])
