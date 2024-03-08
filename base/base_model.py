@@ -72,6 +72,7 @@ class UsersCreate(BaseModel):
     name: str
     sex: int
     datebirth: str
+    referralCode:str
 
 class RequestEmail(BaseModel):
     email: str
@@ -80,3 +81,6 @@ class RequestEmail(BaseModel):
 class ForgotPassword(BaseModel):
     email: str
     newPassword: str
+
+class ReferralCode(BaseModel):
+    referralCode: str

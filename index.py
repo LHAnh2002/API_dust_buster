@@ -4,8 +4,8 @@ from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import sessionmaker, Session
 from databases import Database
 from base.class_base import OTP, Base, Admin, Service, ServiceDuration, Users
-from base.base_model import ForgotPassword, RequestEmail, OTPUserCreate, UsersCreate, ServiceDurationUpdate, ServiceUpdateStatus, ServiceDurationCreate, ServiceAllUpdate, ServiceUpdate, Message, ChangePassword, AdminAvatar, OTPCreate, OTPVerify, ResetPassword, AdminEmail, ServiceCreate
-from utils import convert_string, get_users, convert_date, get_select_service_duration, get_select_service, delete_otp_after_delay, random_id, create_jwt_token, verify_jwt_token, get_admin, oauth2_scheme, token_blacklist
+from base.base_model import ReferralCode, ForgotPassword, RequestEmail, OTPUserCreate, UsersCreate, ServiceDurationUpdate, ServiceUpdateStatus, ServiceDurationCreate, ServiceAllUpdate, ServiceUpdate, Message, ChangePassword, AdminAvatar, OTPCreate, OTPVerify, ResetPassword, AdminEmail, ServiceCreate
+from utils import generate_referral_code, convert_string, get_users, convert_date, get_select_service_duration, get_select_service, delete_otp_after_delay, random_id, create_jwt_token, verify_jwt_token, get_admin, oauth2_scheme, token_blacklist
 from mail.otb_email import send_otp_email
 from mail.cskh_email import send_cskh_email
 
@@ -391,6 +391,9 @@ async def request_otp_user(otp_data: OTPUserCreate, background_tasks: Background
         query = select(Users).where(Users.email == otp_data.email)
         otb_old = await db.fetch_one(query)
         name = otb_old['name']
+    else:
+        name = otp_data.name
+
     query = select(OTP).where(OTP.email == otp_data.email)
     otb_old = await db.fetch_one(query)
     # Kiểm tra nếu otb_old không rỗng
@@ -400,7 +403,7 @@ async def request_otp_user(otp_data: OTPUserCreate, background_tasks: Background
 
     # Tạo và lưu OTP
     id = "OTB-"+ random_id()
-    otp_code = str(random_id(6))
+    otp_code = str(random_id())
 
     new_otp_data = OTP(id=id, code=otp_code, **otp_data.dict())
     
@@ -417,17 +420,21 @@ async def request_otp_user(otp_data: OTPUserCreate, background_tasks: Background
 
     return Message(detail=0)
 
-      
-# Tạo tài khoản
 @app.post("/create-users/", response_model=Message)
 async def create_user(add_users: UsersCreate, db: Session = Depends(get_database)):
     
     db_user = Users(**add_users.dict())
 
+    code = generate_referral_code()
+
     converted_name = convert_string(db_user.name)
     converted_date  = convert_date(db_user.datebirth)
     
-    id = converted_name+converted_date
+    id = converted_name + converted_date
+    
+    # Kiểm tra nếu referralCode là None, gán giá trị mặc định
+    referral_code = add_users.referralCode if add_users.referralCode is not None else ""
+
     async with db.transaction():
         await db.execute(Users.__table__.insert().values(
             id=id,
@@ -440,10 +447,24 @@ async def create_user(add_users: UsersCreate, db: Session = Depends(get_database
             g_points=0,
             sex=db_user.sex,
             datebirth=db_user.datebirth,
-            ban=0
+            ban=0,
+            yourReferralCode=code,
+            referralCode=referral_code
         ))
 
     return Message(detail=0)
+
+#check mã giới thiệu
+@app.post("/referral-code/",response_model=Message)
+async def referral_code(check_eferral_ode: ReferralCode, db: Session = Depends(get_database)):
+
+    query = select(Users).where(Users.yourReferralCode == check_eferral_ode.referralCode)
+    otb_old = await db.fetch_one(query)
+
+    # Kiểm tra nếu otb_old không rỗng
+    if otb_old and  otb_old['yourReferralCode'] == check_eferral_ode.referralCode:
+        return Message(detail=0)
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=-1)
 
 #kiểm tra email có tồn tại không
 @app.post("/request-email/",response_model=Message)

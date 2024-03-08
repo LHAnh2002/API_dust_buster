@@ -57,6 +57,8 @@ class Users(Base):
     sex = Column(Integer, nullable=False)
     datebirth = Column(String, nullable=False)
     ban = Column(Integer, nullable=False)
+    yourReferralCode = Column(String)
+    referralCode = Column(String)
 
 
 class CustomerPromotions(Base):

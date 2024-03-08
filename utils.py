@@ -10,6 +10,8 @@ from jose import JWTError, jwt
 import random
 from sqlalchemy.orm import Session
 from datetime import datetime
+import secrets
+import string
 
 # Thêm danh sách đen cho token
 token_blacklist: set = set()
@@ -34,6 +36,11 @@ def convert_date(input_date):
 def create_jwt_token(data: dict):
     data["iat"] = time.time()
     return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
+
+def generate_referral_code(length=6):
+    alphabet = string.ascii_letters + string.digits
+    code = ''.join(secrets.choice(alphabet) for _ in range(length))
+    return code
 
 # Hàm xác minh JWT token
 def verify_jwt_token(token: str = Depends(oauth2_scheme)):
